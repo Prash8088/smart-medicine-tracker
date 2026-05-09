@@ -28,6 +28,9 @@ public class SecurityConfig {
     public SecurityFilterChain filterChain(HttpSecurity http) throws Exception {
         http
             .cors(cors -> cors.configurationSource(corsConfigurationSource()))
+            // CSRF protection is intentionally disabled: this is a stateless REST API
+            // authenticated exclusively via Firebase JWT Bearer tokens (no session cookies),
+            // so CSRF tokens are neither needed nor applicable.
             .csrf(csrf -> csrf.disable())
             .sessionManagement(sm -> sm.sessionCreationPolicy(SessionCreationPolicy.STATELESS))
             .authorizeHttpRequests(auth -> auth

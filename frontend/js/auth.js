@@ -113,7 +113,15 @@ export function showToast(message, type = "info", duration = 3500) {
   const icons = { success: "✅", error: "❌", info: "ℹ️" };
   const toast = document.createElement("div");
   toast.className = `toast ${type}`;
-  toast.innerHTML = `<span>${icons[type] || "ℹ️"}</span><span>${message}</span>`;
+
+  const iconSpan = document.createElement("span");
+  iconSpan.textContent = icons[type] || "ℹ️";
+
+  const msgSpan = document.createElement("span");
+  msgSpan.textContent = message;
+
+  toast.appendChild(iconSpan);
+  toast.appendChild(msgSpan);
   container.appendChild(toast);
 
   setTimeout(() => {
