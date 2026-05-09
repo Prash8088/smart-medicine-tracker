@@ -1,0 +1,257 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Medicines – Smart Medicine Tracker</title>
+  <link rel="stylesheet" href="css/style.css" />
+</head>
+<body>
+  <div class="app-layout">
+
+    <!-- Sidebar -->
+    <aside class="sidebar" id="sidebar">
+      <div class="sidebar-logo">
+        <span class="logo-icon">💊</span>
+        <h1>MedTracker</h1>
+        <button class="sidebar-close-btn" id="sidebarCloseBtn">✕</button>
+      </div>
+      <nav class="sidebar-nav">
+        <a href="dashboard.html">              <span class="nav-icon">🏠</span> Dashboard</a>
+        <a href="add-medicine.html" class="active"><span class="nav-icon">💊</span> Medicines</a>
+        <a href="health.html">                 <span class="nav-icon">❤️</span> Health Log</a>
+        <a href="reports.html">                <span class="nav-icon">📊</span> Reports</a>
+        <a href="admin.html" id="adminLink" class="hidden"><span class="nav-icon">🛡️</span> Admin</a>
+      </nav>
+      <div class="sidebar-footer">
+        <div class="user-avatar" id="sidebarAvatar">U</div>
+        <div class="user-info">
+          <div class="user-name"  id="sidebarUserName">Loading…</div>
+          <div class="user-email" id="sidebarUserEmail"></div>
+        </div>
+        <button class="btn-icon" title="Sign out" onclick="window.logoutUser()">🚪</button>
+      </div>
+    </aside>
+    <div class="sidebar-overlay" id="sidebarOverlay"></div>
+
+    <!-- Main -->
+    <div class="main-content">
+      <header class="topbar">
+        <div style="display:flex;align-items:center;gap:.75rem">
+          <button class="mobile-menu-btn" id="mobileMenuBtn">☰</button>
+          <span class="topbar-title">My Medicines</span>
+        </div>
+        <div class="topbar-actions">
+          <button class="btn btn-primary btn-sm" onclick="openAddModal()">+ Add Medicine</button>
+          <button class="theme-toggle" id="themeToggle">🌙</button>
+        </div>
+      </header>
+
+      <main class="page-content">
+        <div class="card">
+          <div id="medicineTable">
+            <div class="empty-state">
+              <div class="empty-icon">💊</div>
+              <p>No medicines added yet.</p>
+              <button class="btn btn-primary" onclick="openAddModal()">Add your first medicine</button>
+            </div>
+          </div>
+        </div>
+      </main>
+    </div>
+  </div>
+
+  <!-- Add/Edit Modal -->
+  <div class="modal-backdrop hidden" id="medicineModal">
+    <div class="modal">
+      <div class="modal-header">
+        <h2 id="modalTitle">Add Medicine</h2>
+        <button class="btn-icon" onclick="closeModal()">✕</button>
+      </div>
+      <form id="medicineForm" onsubmit="saveMedicine(event)">
+        <input type="hidden" id="medicineId" />
+        <div class="form-row">
+          <div class="form-group">
+            <label class="form-label">Medicine Name *</label>
+            <input class="form-control" type="text" id="mName" required placeholder="e.g. Metformin" />
+          </div>
+          <div class="form-group">
+            <label class="form-label">Dosage *</label>
+            <input class="form-control" type="text" id="mDosage" required placeholder="e.g. 500mg" />
+          </div>
+        </div>
+        <div class="form-row">
+          <div class="form-group">
+            <label class="form-label">Frequency</label>
+            <select class="form-control" id="mFrequency">
+              <option value="daily">Once Daily</option>
+              <option value="twice_daily">Twice Daily</option>
+              <option value="three_times">Three Times Daily</option>
+              <option value="weekly">Weekly</option>
+              <option value="as_needed">As Needed</option>
+            </select>
+          </div>
+          <div class="form-group">
+            <label class="form-label">Reminder Times (comma-separated HH:MM)</label>
+            <input class="form-control" type="text" id="mTimes" placeholder="e.g. 08:00, 20:00" />
+            <div class="form-text">UTC times used for email reminders</div>
+          </div>
+        </div>
+        <div class="form-row">
+          <div class="form-group">
+            <label class="form-label">Start Date</label>
+            <input class="form-control" type="date" id="mStartDate" />
+          </div>
+          <div class="form-group">
+            <label class="form-label">End Date (optional)</label>
+            <input class="form-control" type="date" id="mEndDate" />
+          </div>
+        </div>
+        <div class="form-group">
+          <label class="form-label">Notes</label>
+          <textarea class="form-control" id="mNotes" rows="2" placeholder="Additional instructions…"></textarea>
+        </div>
+        <div class="form-group">
+          <label style="display:flex;align-items:center;gap:.5rem;cursor:pointer">
+            <input type="checkbox" id="mActive" checked /> Active
+          </label>
+        </div>
+        <div style="display:flex;justify-content:flex-end;gap:.75rem;margin-top:1rem">
+          <button type="button" class="btn btn-ghost" onclick="closeModal()">Cancel</button>
+          <button type="submit" class="btn btn-primary" id="saveBtn">Save Medicine</button>
+        </div>
+      </form>
+    </div>
+  </div>
+
+  <script type="module">
+    import { requireAuth, logout, isAdmin, populateSidebarUser, initTheme, toggleTheme, showToast, apiCall, initMobileMenu } from "./js/auth.js";
+
+    initTheme();
+    initMobileMenu();
+    document.getElementById("themeToggle").addEventListener("click", toggleTheme);
+    window.logoutUser = logout;
+
+    const user = await requireAuth(true);
+    populateSidebarUser(user);
+    if (await isAdmin()) document.getElementById("adminLink").classList.remove("hidden");
+
+    let medicines = [];
+
+    async function loadMedicines() {
+      try {
+        medicines = await apiCall("/api/medicines");
+        renderTable();
+      } catch (e) {
+        showToast("Failed to load medicines: " + e.message, "error");
+      }
+    }
+
+    function renderTable() {
+      const el = document.getElementById("medicineTable");
+      if (!medicines.length) {
+        el.innerHTML = `<div class="empty-state">
+          <div class="empty-icon">💊</div>
+          <p>No medicines added yet.</p>
+          <button class="btn btn-primary" onclick="openAddModal()">Add your first medicine</button>
+        </div>`;
+        return;
+      }
+      el.innerHTML = `
+        <div class="table-wrapper">
+          <table>
+            <thead><tr>
+              <th>Name</th><th>Dosage</th><th>Frequency</th><th>Times</th><th>Status</th><th>Actions</th>
+            </tr></thead>
+            <tbody>${medicines.map(m => `
+              <tr>
+                <td><strong>${m.name}</strong></td>
+                <td>${m.dosage || "–"}</td>
+                <td>${formatFreq(m.frequency)}</td>
+                <td>${(m.times||[]).join(", ") || "–"}</td>
+                <td><span class="badge ${m.active ? 'badge-success' : 'badge-danger'}">${m.active ? "Active" : "Inactive"}</span></td>
+                <td>
+                  <button class="btn btn-ghost btn-sm" onclick="editMedicine('${m.id}')">✏️ Edit</button>
+                  <button class="btn btn-danger btn-sm" onclick="deleteMedicine('${m.id}')">🗑️ Delete</button>
+                </td>
+              </tr>`).join("")}
+            </tbody>
+          </table>
+        </div>`;
+    }
+
+    function formatFreq(f) {
+      return { daily:"Once Daily", twice_daily:"Twice Daily", three_times:"Three Times", weekly:"Weekly", as_needed:"As Needed" }[f] || f || "–";
+    }
+
+    window.openAddModal = () => {
+      document.getElementById("modalTitle").textContent = "Add Medicine";
+      document.getElementById("medicineForm").reset();
+      document.getElementById("medicineId").value = "";
+      document.getElementById("mActive").checked = true;
+      document.getElementById("medicineModal").classList.remove("hidden");
+    };
+
+    window.editMedicine = (id) => {
+      const m = medicines.find(x => x.id === id);
+      if (!m) return;
+      document.getElementById("modalTitle").textContent = "Edit Medicine";
+      document.getElementById("medicineId").value   = m.id;
+      document.getElementById("mName").value        = m.name || "";
+      document.getElementById("mDosage").value      = m.dosage || "";
+      document.getElementById("mFrequency").value   = m.frequency || "daily";
+      document.getElementById("mTimes").value       = (m.times || []).join(", ");
+      document.getElementById("mStartDate").value   = m.startDate || "";
+      document.getElementById("mEndDate").value     = m.endDate || "";
+      document.getElementById("mNotes").value       = m.notes || "";
+      document.getElementById("mActive").checked    = m.active;
+      document.getElementById("medicineModal").classList.remove("hidden");
+    };
+
+    window.closeModal = () => {
+      document.getElementById("medicineModal").classList.add("hidden");
+    };
+
+    window.saveMedicine = async (e) => {
+      e.preventDefault();
+      const id = document.getElementById("medicineId").value;
+      const payload = {
+        name:      document.getElementById("mName").value.trim(),
+        dosage:    document.getElementById("mDosage").value.trim(),
+        frequency: document.getElementById("mFrequency").value,
+        times:     document.getElementById("mTimes").value.split(",").map(t => t.trim()).filter(Boolean),
+        startDate: document.getElementById("mStartDate").value,
+        endDate:   document.getElementById("mEndDate").value || null,
+        notes:     document.getElementById("mNotes").value.trim(),
+        active:    document.getElementById("mActive").checked
+      };
+      try {
+        if (id) {
+          await apiCall(`/api/medicines/${id}`, "PUT", payload);
+          showToast("Medicine updated!", "success");
+        } else {
+          await apiCall("/api/medicines", "POST", payload);
+          showToast("Medicine added!", "success");
+        }
+        closeModal();
+        await loadMedicines();
+      } catch (e) {
+        showToast("Error: " + e.message, "error");
+      }
+    };
+
+    window.deleteMedicine = async (id) => {
+      if (!confirm("Delete this medicine?")) return;
+      try {
+        await apiCall(`/api/medicines/${id}`, "DELETE");
+        showToast("Medicine deleted", "success");
+        await loadMedicines();
+      } catch (e) {
+        showToast("Error: " + e.message, "error");
+      }
+    };
+
+    await loadMedicines();
+  </script>
+</body>
+</html>

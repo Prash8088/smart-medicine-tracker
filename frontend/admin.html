@@ -1,0 +1,183 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Admin – Smart Medicine Tracker</title>
+  <link rel="stylesheet" href="css/style.css" />
+</head>
+<body>
+  <div class="app-layout">
+
+    <!-- Sidebar -->
+    <aside class="sidebar" id="sidebar">
+      <div class="sidebar-logo">
+        <span class="logo-icon">💊</span>
+        <h1>MedTracker</h1>
+        <button class="sidebar-close-btn" id="sidebarCloseBtn">✕</button>
+      </div>
+      <nav class="sidebar-nav">
+        <a href="dashboard.html">            <span class="nav-icon">🏠</span> Dashboard</a>
+        <a href="add-medicine.html">         <span class="nav-icon">💊</span> Medicines</a>
+        <a href="health.html">               <span class="nav-icon">❤️</span> Health Log</a>
+        <a href="reports.html">              <span class="nav-icon">📊</span> Reports</a>
+        <a href="admin.html" class="active"> <span class="nav-icon">🛡️</span> Admin</a>
+      </nav>
+      <div class="sidebar-footer">
+        <div class="user-avatar" id="sidebarAvatar">U</div>
+        <div class="user-info">
+          <div class="user-name"  id="sidebarUserName">Loading…</div>
+          <div class="user-email" id="sidebarUserEmail"></div>
+        </div>
+        <button class="btn-icon" title="Sign out" onclick="window.logoutUser()">🚪</button>
+      </div>
+    </aside>
+    <div class="sidebar-overlay" id="sidebarOverlay"></div>
+
+    <!-- Main -->
+    <div class="main-content">
+      <header class="topbar">
+        <div style="display:flex;align-items:center;gap:.75rem">
+          <button class="mobile-menu-btn" id="mobileMenuBtn">☰</button>
+          <span class="topbar-title">🛡️ Admin Dashboard</span>
+        </div>
+        <div class="topbar-actions">
+          <button class="theme-toggle" id="themeToggle">🌙</button>
+        </div>
+      </header>
+
+      <!-- Access denied state (shown before auth check) -->
+      <main class="page-content" id="accessDenied" class="hidden">
+        <div class="empty-state" style="margin-top:4rem">
+          <div class="empty-icon">🚫</div>
+          <h2 style="margin-bottom:.5rem">Access Denied</h2>
+          <p>You need admin privileges to access this page.</p>
+          <a href="dashboard.html" class="btn btn-primary" style="margin-top:1rem">Back to Dashboard</a>
+        </div>
+      </main>
+
+      <!-- Admin content -->
+      <main class="page-content hidden" id="adminContent">
+        <!-- Analytics -->
+        <div class="stats-grid" style="margin-bottom:1.5rem">
+          <div class="stat-card">
+            <div class="stat-icon blue">👥</div>
+            <div><div class="stat-value" id="aUsers">–</div><div class="stat-label">Total Users</div></div>
+          </div>
+          <div class="stat-card">
+            <div class="stat-icon green">💊</div>
+            <div><div class="stat-value" id="aMeds">–</div><div class="stat-label">Total Medicines</div></div>
+          </div>
+          <div class="stat-card">
+            <div class="stat-icon purple">❤️</div>
+            <div><div class="stat-value" id="aLogs">–</div><div class="stat-label">Health Logs</div></div>
+          </div>
+        </div>
+
+        <!-- Set Admin Claim -->
+        <div class="card" style="margin-bottom:1.5rem">
+          <div class="card-header"><h2 class="card-title">Manage Admin Claims</h2></div>
+          <div style="display:flex;gap:.75rem;align-items:flex-end;flex-wrap:wrap">
+            <div class="form-group" style="flex:1;min-width:200px;margin-bottom:0">
+              <label class="form-label">User Email</label>
+              <input class="form-control" type="email" id="claimEmail" placeholder="user@example.com" />
+            </div>
+            <div class="form-group" style="margin-bottom:0">
+              <label class="form-label">Admin?</label>
+              <select class="form-control" id="claimValue">
+                <option value="true">Grant Admin</option>
+                <option value="false">Revoke Admin</option>
+              </select>
+            </div>
+            <button class="btn btn-primary" onclick="setClaim()">Apply</button>
+          </div>
+        </div>
+
+        <!-- Users Table -->
+        <div class="card">
+          <div class="card-header">
+            <h2 class="card-title">Registered Users</h2>
+            <button class="btn btn-ghost btn-sm" onclick="loadUsers()">🔄 Refresh</button>
+          </div>
+          <div id="usersTable">
+            <div class="empty-state"><div class="empty-icon">👥</div><p>Loading users…</p></div>
+          </div>
+        </div>
+      </main>
+    </div>
+  </div>
+
+  <script type="module">
+    import { requireAuth, logout, isAdmin, populateSidebarUser, initTheme, toggleTheme, showToast, apiCall, initMobileMenu } from "./js/auth.js";
+
+    initTheme();
+    initMobileMenu();
+    document.getElementById("themeToggle").addEventListener("click", toggleTheme);
+    window.logoutUser = logout;
+
+    const user = await requireAuth(true);
+    populateSidebarUser(user);
+
+    const admin = await isAdmin();
+    if (!admin) {
+      document.getElementById("accessDenied").classList.remove("hidden");
+      return;
+    }
+
+    document.getElementById("adminContent").classList.remove("hidden");
+
+    // Load analytics
+    try {
+      const stats = await apiCall("/api/admin/analytics");
+      document.getElementById("aUsers").textContent = stats.usersCount ?? "–";
+      document.getElementById("aMeds").textContent  = stats.medicinesCount ?? "–";
+      document.getElementById("aLogs").textContent  = stats.healthLogsCount ?? "–";
+    } catch (e) {
+      showToast("Failed to load analytics: " + e.message, "error");
+    }
+
+    // Load users
+    window.loadUsers = async () => {
+      try {
+        const users = await apiCall("/api/admin/users");
+        const el = document.getElementById("usersTable");
+        if (!users.length) {
+          el.innerHTML = `<div class="empty-state"><div class="empty-icon">👥</div><p>No users found.</p></div>`;
+          return;
+        }
+        el.innerHTML = `
+          <div class="table-wrapper">
+            <table>
+              <thead><tr><th>Name</th><th>Email</th><th>Joined</th><th>Phone</th></tr></thead>
+              <tbody>${users.map(u => `
+                <tr>
+                  <td>${u.displayName || "–"}</td>
+                  <td>${u.email || "–"}</td>
+                  <td>${u.createdAt ? new Date(u.createdAt).toLocaleDateString() : "–"}</td>
+                  <td>${u.phoneNumber || "–"}</td>
+                </tr>`).join("")}
+              </tbody>
+            </table>
+          </div>`;
+      } catch (e) {
+        showToast("Failed to load users: " + e.message, "error");
+      }
+    };
+
+    window.setClaim = async () => {
+      const email   = document.getElementById("claimEmail").value.trim();
+      const isAdmin = document.getElementById("claimValue").value === "true";
+      if (!email) { showToast("Please enter an email.", "error"); return; }
+      try {
+        await apiCall("/api/admin/set-claim", "POST", { email, admin: isAdmin });
+        showToast(`Admin claim ${isAdmin ? "granted to" : "revoked from"} ${email}`, "success");
+        document.getElementById("claimEmail").value = "";
+      } catch (e) {
+        showToast("Error: " + e.message, "error");
+      }
+    };
+
+    await loadUsers();
+  </script>
+</body>
+</html>

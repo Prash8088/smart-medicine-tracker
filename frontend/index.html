@@ -1,0 +1,206 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Smart Medicine Tracker – Sign In</title>
+  <link rel="stylesheet" href="css/style.css" />
+  <style>
+    .auth-error {
+      background: #fee2e2; color: #991b1b;
+      border-radius: var(--radius); padding: .6rem .9rem;
+      font-size: .85rem; margin-bottom: 1rem; display: none;
+    }
+    .divider { text-align: center; color: var(--text-secondary); font-size: .8rem; margin: 1rem 0; position: relative; }
+    .divider::before, .divider::after {
+      content: ""; position: absolute; top: 50%; width: 43%; height: 1px; background: var(--border);
+    }
+    .divider::before { left: 0; }
+    .divider::after  { right: 0; }
+    .google-btn {
+      width: 100%; display: flex; align-items: center; justify-content: center;
+      gap: .6rem; padding: .6rem; border: 1px solid var(--border);
+      border-radius: var(--radius); background: var(--surface); font-size: .9rem;
+      cursor: pointer; transition: background var(--transition);
+    }
+    .google-btn:hover { background: var(--bg); }
+  </style>
+</head>
+<body>
+  <div class="auth-page">
+    <div class="auth-card">
+      <div class="auth-logo">
+        <div class="logo-icon">💊</div>
+        <h1>Smart Medicine Tracker</h1>
+        <p>Manage your medicines &amp; health data</p>
+      </div>
+
+      <!-- Tabs -->
+      <div class="auth-tabs">
+        <button class="auth-tab active" id="loginTab"    onclick="showTab('login')">Sign In</button>
+        <button class="auth-tab"        id="registerTab" onclick="showTab('register')">Create Account</button>
+      </div>
+
+      <div class="auth-error" id="authError"></div>
+
+      <!-- Login Form -->
+      <div id="loginForm">
+        <div class="form-group">
+          <label class="form-label">Email</label>
+          <input class="form-control" type="email" id="loginEmail" placeholder="you@example.com" required />
+        </div>
+        <div class="form-group">
+          <label class="form-label">Password</label>
+          <input class="form-control" type="password" id="loginPassword" placeholder="••••••••" required />
+        </div>
+        <button class="btn btn-primary btn-lg" style="width:100%" onclick="login()">Sign In</button>
+
+        <div class="divider">or</div>
+        <button class="google-btn" onclick="loginWithGoogle()">
+          <img src="https://www.gstatic.com/firebasejs/ui/2.0.0/images/auth/google.svg" width="18" alt="Google" />
+          Continue with Google
+        </button>
+
+        <p style="text-align:center;font-size:.8rem;margin-top:1rem;">
+          <a href="#" onclick="showForgotPassword()" style="color:var(--primary)">Forgot password?</a>
+        </p>
+      </div>
+
+      <!-- Register Form -->
+      <div id="registerForm" class="hidden">
+        <div class="form-group">
+          <label class="form-label">Full Name</label>
+          <input class="form-control" type="text" id="regName" placeholder="John Doe" />
+        </div>
+        <div class="form-group">
+          <label class="form-label">Email</label>
+          <input class="form-control" type="email" id="regEmail" placeholder="you@example.com" required />
+        </div>
+        <div class="form-group">
+          <label class="form-label">Password</label>
+          <input class="form-control" type="password" id="regPassword" placeholder="Min 6 characters" required />
+        </div>
+        <button class="btn btn-primary btn-lg" style="width:100%" onclick="register()">Create Account</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- Theme toggle floating -->
+  <button class="theme-toggle" style="position:fixed;top:1rem;right:1rem" onclick="toggleThemeLocal()">🌙</button>
+
+  <script type="module">
+    import { auth, API_BASE_URL } from "./js/firebase-config.js";
+    import {
+      createUserWithEmailAndPassword,
+      signInWithEmailAndPassword,
+      GoogleAuthProvider,
+      signInWithPopup,
+      sendPasswordResetEmail,
+      onAuthStateChanged,
+      updateProfile
+    } from "https://www.gstatic.com/firebasejs/10.12.0/firebase-auth.js";
+    import { initTheme, toggleTheme, showToast } from "./js/auth.js";
+
+    initTheme();
+    window.toggleThemeLocal = toggleTheme;
+
+    // Redirect if already logged in
+    onAuthStateChanged(auth, user => {
+      if (user) window.location.href = "dashboard.html";
+    });
+
+    window.showTab = (tab) => {
+      document.getElementById("loginForm").classList.toggle("hidden", tab !== "login");
+      document.getElementById("registerForm").classList.toggle("hidden", tab !== "register");
+      document.getElementById("loginTab").classList.toggle("active", tab === "login");
+      document.getElementById("registerTab").classList.toggle("active", tab === "register");
+      hideError();
+    };
+
+    function showError(msg) {
+      const el = document.getElementById("authError");
+      el.textContent = msg;
+      el.style.display = "block";
+    }
+    function hideError() {
+      document.getElementById("authError").style.display = "none";
+    }
+
+    async function saveProfile(user) {
+      try {
+        const token = await user.getIdToken();
+        await fetch(`${API_BASE_URL}/api/users/me`, {
+          method: "POST",
+          headers: { "Authorization": `Bearer ${token}`, "Content-Type": "application/json" },
+          body: JSON.stringify({ email: user.email, displayName: user.displayName || "" })
+        });
+      } catch (e) { /* non-fatal */ }
+    }
+
+    window.login = async () => {
+      hideError();
+      const email    = document.getElementById("loginEmail").value.trim();
+      const password = document.getElementById("loginPassword").value;
+      if (!email || !password) { showError("Email and password are required."); return; }
+      try {
+        const { user } = await signInWithEmailAndPassword(auth, email, password);
+        await saveProfile(user);
+        window.location.href = "dashboard.html";
+      } catch (e) {
+        showError(friendlyError(e.code));
+      }
+    };
+
+    window.register = async () => {
+      hideError();
+      const name     = document.getElementById("regName").value.trim();
+      const email    = document.getElementById("regEmail").value.trim();
+      const password = document.getElementById("regPassword").value;
+      if (!email || !password) { showError("Email and password are required."); return; }
+      try {
+        const { user } = await createUserWithEmailAndPassword(auth, email, password);
+        if (name) await updateProfile(user, { displayName: name });
+        await saveProfile(user);
+        window.location.href = "dashboard.html";
+      } catch (e) {
+        showError(friendlyError(e.code));
+      }
+    };
+
+    window.loginWithGoogle = async () => {
+      hideError();
+      const provider = new GoogleAuthProvider();
+      try {
+        const { user } = await signInWithPopup(auth, provider);
+        await saveProfile(user);
+        window.location.href = "dashboard.html";
+      } catch (e) {
+        if (e.code !== "auth/popup-closed-by-user") showError(friendlyError(e.code));
+      }
+    };
+
+    window.showForgotPassword = async () => {
+      const email = prompt("Enter your email address to reset your password:");
+      if (!email) return;
+      try {
+        await sendPasswordResetEmail(auth, email);
+        showToast("Password reset email sent!", "success");
+      } catch (e) {
+        showError(friendlyError(e.code));
+      }
+    };
+
+    function friendlyError(code) {
+      const map = {
+        "auth/user-not-found":       "No account found with this email.",
+        "auth/wrong-password":       "Incorrect password.",
+        "auth/email-already-in-use": "An account with this email already exists.",
+        "auth/weak-password":        "Password must be at least 6 characters.",
+        "auth/invalid-email":        "Please enter a valid email address.",
+        "auth/too-many-requests":    "Too many attempts. Please try again later."
+      };
+      return map[code] || "An error occurred. Please try again.";
+    }
+  </script>
+</body>
+</html>
