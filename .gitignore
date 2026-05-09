@@ -1,0 +1,31 @@
+# Maven build artifacts
+backend/target/
+backend/.mvn/
+backend/*.iml
+
+# IDE files
+.idea/
+*.iml
+*.iws
+.classpath
+.project
+.settings/
+
+# Environment files
+.env
+*.env
+
+# Firebase service account key (never commit!)
+*serviceAccountKey*.json
+firebase-service-account*.json
+
+# macOS
+.DS_Store
+
+# Node (if any tooling added later)
+node_modules/
+npm-debug.log
+
+# Logs
+*.log
+logs/

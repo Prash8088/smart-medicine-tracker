@@ -1,0 +1,179 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Reports – Smart Medicine Tracker</title>
+  <link rel="stylesheet" href="css/style.css" />
+</head>
+<body>
+  <div class="app-layout">
+
+    <!-- Sidebar -->
+    <aside class="sidebar" id="sidebar">
+      <div class="sidebar-logo">
+        <span class="logo-icon">💊</span>
+        <h1>MedTracker</h1>
+        <button class="sidebar-close-btn" id="sidebarCloseBtn">✕</button>
+      </div>
+      <nav class="sidebar-nav">
+        <a href="dashboard.html">            <span class="nav-icon">🏠</span> Dashboard</a>
+        <a href="add-medicine.html">         <span class="nav-icon">💊</span> Medicines</a>
+        <a href="health.html">               <span class="nav-icon">❤️</span> Health Log</a>
+        <a href="reports.html" class="active"><span class="nav-icon">📊</span> Reports</a>
+        <a href="admin.html" id="adminLink" class="hidden"><span class="nav-icon">🛡️</span> Admin</a>
+      </nav>
+      <div class="sidebar-footer">
+        <div class="user-avatar" id="sidebarAvatar">U</div>
+        <div class="user-info">
+          <div class="user-name"  id="sidebarUserName">Loading…</div>
+          <div class="user-email" id="sidebarUserEmail"></div>
+        </div>
+        <button class="btn-icon" title="Sign out" onclick="window.logoutUser()">🚪</button>
+      </div>
+    </aside>
+    <div class="sidebar-overlay" id="sidebarOverlay"></div>
+
+    <!-- Main -->
+    <div class="main-content">
+      <header class="topbar">
+        <div style="display:flex;align-items:center;gap:.75rem">
+          <button class="mobile-menu-btn" id="mobileMenuBtn">☰</button>
+          <span class="topbar-title">Reports</span>
+        </div>
+        <div class="topbar-actions">
+          <button class="theme-toggle" id="themeToggle">🌙</button>
+        </div>
+      </header>
+
+      <main class="page-content">
+        <!-- Summary Cards -->
+        <div class="stats-grid">
+          <div class="stat-card">
+            <div class="stat-icon blue">💊</div>
+            <div><div class="stat-value" id="rMeds">–</div><div class="stat-label">Total Medicines</div></div>
+          </div>
+          <div class="stat-card">
+            <div class="stat-icon green">❤️</div>
+            <div><div class="stat-value" id="rLogs">–</div><div class="stat-label">Health Logs</div></div>
+          </div>
+          <div class="stat-card">
+            <div class="stat-icon purple">✅</div>
+            <div><div class="stat-value" id="rActive">–</div><div class="stat-label">Active Medicines</div></div>
+          </div>
+        </div>
+
+        <!-- Upload Placeholder -->
+        <div class="card" style="margin-bottom:1.5rem">
+          <div class="card-header">
+            <h2 class="card-title">📁 Upload Reports / Lab Results</h2>
+          </div>
+          <p style="margin-bottom:1rem">Upload your lab reports, prescriptions, or other medical documents for your records.</p>
+          <div id="uploadZone" style="
+            border: 2px dashed var(--border);
+            border-radius: var(--radius);
+            padding: 2.5rem;
+            text-align: center;
+            cursor: pointer;
+            transition: border-color .2s;
+          " ondragover="handleDragOver(event)" ondragleave="handleDragLeave(event)" ondrop="handleDrop(event)" onclick="document.getElementById('fileInput').click()">
+            <div style="font-size:2.5rem;margin-bottom:.5rem">📄</div>
+            <p><strong>Click to upload</strong> or drag &amp; drop</p>
+            <p style="font-size:.8rem">PDF, JPG, PNG — max 10 MB</p>
+          </div>
+          <input type="file" id="fileInput" accept=".pdf,.jpg,.jpeg,.png" multiple style="display:none" onchange="handleFileSelect(event)" />
+          <div id="fileList" style="margin-top:1rem"></div>
+          <p style="font-size:.8rem;color:var(--text-secondary);margin-top:.75rem">
+            ℹ️ File upload storage integration (e.g. Firebase Storage) can be configured in <code>js/firebase-config.js</code>.
+          </p>
+        </div>
+
+        <!-- Medicine List Summary -->
+        <div class="card">
+          <div class="card-header">
+            <h2 class="card-title">Medicine Summary</h2>
+          </div>
+          <div id="medicineSummary">
+            <div class="empty-state"><div class="empty-icon">📋</div><p>Loading…</p></div>
+          </div>
+        </div>
+      </main>
+    </div>
+  </div>
+
+  <script type="module">
+    import { requireAuth, logout, isAdmin, populateSidebarUser, initTheme, toggleTheme, showToast, apiCall, initMobileMenu } from "./js/auth.js";
+
+    initTheme();
+    initMobileMenu();
+    document.getElementById("themeToggle").addEventListener("click", toggleTheme);
+    window.logoutUser = logout;
+
+    const user = await requireAuth(true);
+    populateSidebarUser(user);
+    if (await isAdmin()) document.getElementById("adminLink").classList.remove("hidden");
+
+    // Load data
+    try {
+      const [medicines, logs] = await Promise.all([
+        apiCall("/api/medicines"),
+        apiCall("/api/health")
+      ]);
+
+      const active = medicines.filter(m => m.active);
+      document.getElementById("rMeds").textContent   = medicines.length;
+      document.getElementById("rLogs").textContent   = logs.length;
+      document.getElementById("rActive").textContent = active.length;
+
+      if (medicines.length) {
+        document.getElementById("medicineSummary").innerHTML = `
+          <div class="table-wrapper">
+            <table>
+              <thead><tr><th>Medicine</th><th>Dosage</th><th>Frequency</th><th>Start Date</th><th>Status</th></tr></thead>
+              <tbody>${medicines.map(m => `
+                <tr>
+                  <td><strong>${m.name}</strong></td>
+                  <td>${m.dosage||"–"}</td>
+                  <td>${m.frequency||"–"}</td>
+                  <td>${m.startDate||"–"}</td>
+                  <td><span class="badge ${m.active?"badge-success":"badge-danger"}">${m.active?"Active":"Inactive"}</span></td>
+                </tr>`).join("")}
+              </tbody>
+            </table>
+          </div>`;
+      } else {
+        document.getElementById("medicineSummary").innerHTML = `<div class="empty-state"><div class="empty-icon">📋</div><p>No medicines found.</p></div>`;
+      }
+    } catch (e) {
+      showToast("Failed to load data: " + e.message, "error");
+    }
+
+    // File upload handlers (placeholder)
+    window.handleDragOver = (e) => {
+      e.preventDefault();
+      document.getElementById("uploadZone").style.borderColor = "var(--primary)";
+    };
+    window.handleDragLeave = () => {
+      document.getElementById("uploadZone").style.borderColor = "var(--border)";
+    };
+    window.handleDrop = (e) => {
+      e.preventDefault();
+      document.getElementById("uploadZone").style.borderColor = "var(--border)";
+      handleFiles(e.dataTransfer.files);
+    };
+    window.handleFileSelect = (e) => handleFiles(e.target.files);
+
+    function handleFiles(files) {
+      const listEl = document.getElementById("fileList");
+      Array.from(files).forEach(file => {
+        const item = document.createElement("div");
+        item.style.cssText = "display:flex;align-items:center;gap:.5rem;padding:.5rem;border:1px solid var(--border);border-radius:var(--radius);margin-bottom:.4rem;font-size:.85rem";
+        item.innerHTML = `📎 ${file.name} <span style="color:var(--text-secondary);font-size:.75rem">(${(file.size/1024).toFixed(1)} KB)</span>
+          <span class="badge badge-info" style="margin-left:auto">Ready to upload</span>`;
+        listEl.appendChild(item);
+      });
+      showToast("File upload integration can be connected to Firebase Storage or your backend.", "info", 5000);
+    }
+  </script>
+</body>
+</html>

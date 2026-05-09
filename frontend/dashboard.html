@@ -1,0 +1,177 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Dashboard – Smart Medicine Tracker</title>
+  <link rel="stylesheet" href="css/style.css" />
+</head>
+<body>
+  <div class="app-layout">
+
+    <!-- Sidebar -->
+    <aside class="sidebar" id="sidebar">
+      <div class="sidebar-logo">
+        <span class="logo-icon">💊</span>
+        <h1>MedTracker</h1>
+        <button class="sidebar-close-btn" id="sidebarCloseBtn">✕</button>
+      </div>
+      <nav class="sidebar-nav">
+        <a href="dashboard.html"    class="active"><span class="nav-icon">🏠</span> Dashboard</a>
+        <a href="add-medicine.html">              <span class="nav-icon">💊</span> Medicines</a>
+        <a href="health.html">                    <span class="nav-icon">❤️</span> Health Log</a>
+        <a href="reports.html">                   <span class="nav-icon">📊</span> Reports</a>
+        <a href="admin.html" id="adminLink" class="hidden"><span class="nav-icon">🛡️</span> Admin</a>
+      </nav>
+      <div class="sidebar-footer">
+        <div class="user-avatar" id="sidebarAvatar">U</div>
+        <div class="user-info">
+          <div class="user-name"  id="sidebarUserName">Loading…</div>
+          <div class="user-email" id="sidebarUserEmail"></div>
+        </div>
+        <button class="btn-icon" title="Sign out" onclick="window.logoutUser()">🚪</button>
+      </div>
+    </aside>
+    <div class="sidebar-overlay" id="sidebarOverlay"></div>
+
+    <!-- Main -->
+    <div class="main-content">
+      <header class="topbar">
+        <div style="display:flex;align-items:center;gap:.75rem">
+          <button class="mobile-menu-btn" id="mobileMenuBtn">☰</button>
+          <span class="topbar-title">Dashboard</span>
+        </div>
+        <div class="topbar-actions">
+          <button class="theme-toggle" id="themeToggle">🌙</button>
+        </div>
+      </header>
+
+      <main class="page-content">
+        <!-- Stats -->
+        <div class="stats-grid" id="statsGrid">
+          <div class="stat-card">
+            <div class="stat-icon blue">💊</div>
+            <div><div class="stat-value" id="statMedicines">–</div><div class="stat-label">Active Medicines</div></div>
+          </div>
+          <div class="stat-card">
+            <div class="stat-icon green">✅</div>
+            <div><div class="stat-value" id="statDoses">–</div><div class="stat-label">Doses Today</div></div>
+          </div>
+          <div class="stat-card">
+            <div class="stat-icon purple">❤️</div>
+            <div><div class="stat-value" id="statLogs">–</div><div class="stat-label">Health Logs</div></div>
+          </div>
+          <div class="stat-card">
+            <div class="stat-icon orange">📅</div>
+            <div><div class="stat-value" id="statDate">–</div><div class="stat-label">Today</div></div>
+          </div>
+        </div>
+
+        <div style="display:grid;grid-template-columns:1fr 1fr;gap:1rem;flex-wrap:wrap">
+          <!-- Today's Schedule -->
+          <div class="card" style="grid-column:1">
+            <div class="card-header">
+              <h2 class="card-title">Today's Schedule</h2>
+              <a href="add-medicine.html" class="btn btn-primary btn-sm">+ Add</a>
+            </div>
+            <div id="scheduleList">
+              <div class="empty-state">
+                <div class="empty-icon">💊</div>
+                <p>No medicines scheduled for today.</p>
+                <a href="add-medicine.html" class="btn btn-primary">Add Medicine</a>
+              </div>
+            </div>
+          </div>
+
+          <!-- Recent Health Logs -->
+          <div class="card" style="grid-column:2">
+            <div class="card-header">
+              <h2 class="card-title">Recent Health Logs</h2>
+              <a href="health.html" class="btn btn-ghost btn-sm">View All</a>
+            </div>
+            <div id="recentLogs">
+              <div class="empty-state">
+                <div class="empty-icon">❤️</div>
+                <p>No health logs yet.</p>
+                <a href="health.html" class="btn btn-primary">Log Health</a>
+              </div>
+            </div>
+          </div>
+        </div>
+      </main>
+    </div>
+  </div>
+
+  <script type="module">
+    import { requireAuth, logout, isAdmin, populateSidebarUser, initTheme, toggleTheme, showToast, apiCall, initMobileMenu } from "./js/auth.js";
+
+    initTheme();
+    initMobileMenu();
+    document.getElementById("themeToggle").addEventListener("click", toggleTheme);
+    window.logoutUser = logout;
+
+    const user = await requireAuth(true);
+    populateSidebarUser(user);
+
+    // Show admin link if admin
+    if (await isAdmin()) {
+      document.getElementById("adminLink").classList.remove("hidden");
+    }
+
+    // Set today's date
+    const today = new Date().toLocaleDateString("en-US", { weekday:"short", month:"short", day:"numeric" });
+    document.getElementById("statDate").textContent = today;
+
+    // Load data
+    try {
+      const [medicines, logs] = await Promise.all([
+        apiCall("/api/medicines"),
+        apiCall("/api/health")
+      ]);
+
+      const active = medicines.filter(m => m.active);
+      document.getElementById("statMedicines").textContent = active.length;
+      document.getElementById("statLogs").textContent = logs.length;
+
+      // Today's schedule
+      const currentHHmm = new Date().toTimeString().slice(0,5);
+      const todayItems = active.flatMap(m =>
+        (m.times || []).map(t => ({ name: m.name, dosage: m.dosage, time: t, due: t <= currentHHmm }))
+      ).sort((a, b) => a.time.localeCompare(b.time));
+
+      document.getElementById("statDoses").textContent = todayItems.filter(i => i.due).length;
+
+      if (todayItems.length > 0) {
+        document.getElementById("scheduleList").innerHTML = todayItems.map(item => `
+          <div class="schedule-item">
+            <span class="schedule-time">${item.time}</span>
+            <div>
+              <div class="schedule-name">${item.name}</div>
+              <div class="schedule-dose">${item.dosage || ""}</div>
+            </div>
+            <span class="badge ${item.due ? 'badge-success' : 'badge-info'}" style="margin-left:auto">
+              ${item.due ? "Due" : "Upcoming"}
+            </span>
+          </div>`).join("");
+      }
+
+      // Recent health logs
+      if (logs.length > 0) {
+        document.getElementById("recentLogs").innerHTML = logs.slice(0, 5).map(log => `
+          <div class="schedule-item">
+            <div style="flex:1">
+              <div class="schedule-name">${log.date || "–"} ${log.time || ""}</div>
+              <div class="schedule-dose">
+                ${log.bloodPressureSystolic ? `BP: ${log.bloodPressureSystolic}/${log.bloodPressureDiastolic}  ` : ""}
+                ${log.heartRate ? `HR: ${log.heartRate}bpm  ` : ""}
+                ${log.weight ? `Weight: ${log.weight}kg` : ""}
+              </div>
+            </div>
+          </div>`).join("");
+      }
+    } catch (e) {
+      showToast("Failed to load dashboard data: " + e.message, "error");
+    }
+  </script>
+</body>
+</html>
